@@ -43,7 +43,7 @@ public class RetrolambdaPluginJava implements Plugin<Project> {
                     project.task(taskName, dependsOn: set.classesTaskName, type: RetrolambdaTask) {
                         inputDir = set.output.classesDir
                         outputDir = oldOutputDir
-                        classpath = set.runtimeClasspath
+                        classpath = set.compileClasspath + project.files(set.output.classesDir)
                         javaVersion = project.retrolambda.javaVersion
                     }
 

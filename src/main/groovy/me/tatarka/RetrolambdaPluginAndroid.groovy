@@ -59,7 +59,7 @@ public class RetrolambdaPluginAndroid implements Plugin<Project> {
                     var.javaCompile.options.compilerArgs += ["-bootclasspath", "$jarPath/android.jar"]
 
                     project.task("compileRetrolambda${name}", dependsOn: [var.javaCompile],  type: RetrolambdaTask) {
-                        inputDir = "$buildPath/$var.name"
+                        inputDir = project.file("$buildPath/$var.name")
                         outputDir = oldDestDir
                         classpath = classpathFiles
                         javaVersion = project.retrolambda.javaVersion

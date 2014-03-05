@@ -4,43 +4,87 @@ import org.gradle.api.JavaVersion
 import org.gradle.api.ProjectConfigurationException
 import org.gradle.api.file.FileCollection
 import org.gradle.api.logging.LogLevel
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.incremental.IncrementalTaskInputs
 
 import static me.tatarka.RetrolambdaPlugin.javaVersionToBytecode
 /**
  * Created by evan on 3/4/14.
  */
 class RetrolambdaTask extends DefaultTask {
-    Object inputDir
-    Object outputDir
+    @InputDirectory
+    File inputDir
+
+    @OutputDirectory
+    File outputDir
+
+    @Input
     FileCollection classpath
+
+    @Input
     JavaVersion javaVersion = JavaVersion.VERSION_1_6
 
     @TaskAction
-    def run() {
-        project.javaexec {
-            // Ensure retrolambda runs on java8
-            if (!project.retrolambda.onJava8) {
-                def java = "${project.retrolambda.tryGetJdk()}/bin/java"
-                if (!checkIfExecutableExists(java)) {
-                    throw new ProjectConfigurationException("Cannot find executable: $java", null)
+    def execute(IncrementalTaskInputs inputs) {
+        def changes = []
+        inputs.outOfDate { changes += it }
+
+        changes.each { change ->
+            if (change.modified) deleteReleated(toOutput(change.file))
+        }
+
+        if (!changes.isEmpty()) {
+            //TODO: pass in only the files that have changed
+            project.javaexec {
+                // Ensure retrolambda runs on java8
+                if (!project.retrolambda.onJava8) {
+                    def java = "${project.retrolambda.tryGetJdk()}/bin/java"
+                    if (!checkIfExecutableExists(java)) {
+                        throw new ProjectConfigurationException("Cannot find executable: $java", null)
+                    }
+                    executable java
                 }
-                executable java
+
+                def bytecodeVersion = javaVersionToBytecode(javaVersion)
+
+                classpath = project.files(project.configurations.retrolambdaConfig)
+                main = 'net.orfjackal.retrolambda.Main'
+                jvmArgs = [
+                        "-Dretrolambda.inputDir=$inputDir",
+                        "-Dretrolambda.outputDir=$outputDir",
+                        "-Dretrolambda.classpath=${this.classpath.asPath}",
+                        "-Dretrolambda.bytecodeVersion=$bytecodeVersion",
+                        "-javaagent:$classpath.asPath"
+                ]
+
+                logging.captureStandardOutput(LogLevel.INFO)
             }
+        }
 
-            def bytecodeVersion = javaVersionToBytecode(javaVersion)
+        inputs.removed { change ->
+            File outFile = toOutput(change.file)
+            outFile.delete()
+            project.logger.debug("Deleted " + outFile)
+            deleteReleated(outFile)
+        }
+    }
 
-            classpath = project.files(project.configurations.retrolambdaConfig)
-            main = 'net.orfjackal.retrolambda.Main'
-            jvmArgs = [
-                    "-Dretrolambda.inputDir=$inputDir",
-                    "-Dretrolambda.outputDir=$outputDir",
-                    "-Dretrolambda.classpath=${this.classpath.asPath}",
-                    "-Dretrolambda.bytecodeVersion=$bytecodeVersion",
-                    "-javaagent:$classpath.asPath"
-            ]
+    def File toOutput(File file) {
+        return outputDir.toPath().resolve(inputDir.toPath().relativize(file.toPath())).toFile()
+    }
 
-            logging.captureStandardOutput(LogLevel.INFO)
+    def deleteReleated(File file) {
+        def className = file.name.replaceFirst(/\.class$/, '')
+        // Delete any generated Lambda classes
+        project.logger.debug("Deleting related for " + className + " in " + file.parentFile)
+        file.parentFile.eachFile {
+            if (it.path.matches(/.*$className\$\$/ + /Lambda.*\.class$/)) {
+                project.logger.debug("Deleted " + it)
+                it.delete()
+            }
         }
     }
 }
