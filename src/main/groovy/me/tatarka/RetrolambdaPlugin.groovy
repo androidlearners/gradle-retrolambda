@@ -16,6 +16,7 @@
 
 package me.tatarka
 
+import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 
@@ -65,5 +66,15 @@ public class RetrolambdaPlugin implements Plugin<Project> {
      */
     static String checkIfExecutableExists(String file){
         new File(file).exists()||new File(file+'.exe').exists()
+    }
+
+    static int javaVersionToBytecode(JavaVersion javaVersion) {
+        switch (javaVersion.majorVersion) {
+            case '6': return 50
+            case '7': return 51
+            default:
+                throw new RuntimeException("Unknown java version: $javaVersion, " +
+                        "only 6 or 7 are accepted")
+        }
     }
 }
